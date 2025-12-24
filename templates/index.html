@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ ai_name }} Companion Chat</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f0f2f5; padding: 20px; }
+        .chat-container { display: flex; gap: 20px; }
+        .chat-box { flex: 2; background: #fff; border-radius: 10px; padding: 15px; height: 500px; overflow-y: scroll; }
+        .stats-box { flex: 1; background: #fff; border-radius: 10px; padding: 15px; height: 500px; }
+        .message { margin: 5px 0; }
+        .user { color: blue; }
+        .ai { color: green; }
+        .input-area { margin-top: 10px; display: flex; gap: 10px; }
+        input[type=text] { flex: 1; padding: 8px; border-radius: 5px; border: 1px solid #ccc; }
+        button { padding: 8px 15px; border-radius: 5px; border: none; background: #4CAF50; color: white; cursor: pointer; }
+        button:hover { background: #45a049; }
+    </style>
+</head>
+<body>
+
+<h1>Chat with {{ ai_name }}</h1>
+<div class="chat-container">
+    <div class="chat-box" id="chat-box">
+        <!-- Chat messages will appear here -->
+    </div>
+
+    <div class="stats-box" id="stats-box">
+        <h3>Companion Stats</h3>
+        <p><strong>HP:</strong> <span id="hp">{{ stats.hp }}</span></p>
+        <p><strong>Courage:</strong> <span id="courage">{{ stats.courage }}</span></p>
+        <p><strong>Gold:</strong> <span id="gold">{{ stats.gold }}</span></p>
+        <p><strong>Skills:</strong> <span id="skills">{{ stats.skills }}</span></p>
+        <p><strong>Mood:</strong> <span id="mood">{{ stats.mood }}</span></p>
+        <p><strong>Level:</strong> <span id="level">{{ stats.level }}</span></p>
+        <p><strong>XP:</strong> <span id="xp">{{ stats.xp }}</span></p>
+    </div>
+</div>
+
+<div class="input-area">
+    <input type="text" id="user-input" placeholder="Type your message...">
+    <button onclick="sendMessage()">Send</button>
+</div>
+
+<script>
+function playAudioFromBase64(base64Audio) {
+    const audio = new Audio("data:audio/mp3;base64," + base64Audio);
+    audio.volume = 1.0;
+    audio.play();
+}
+
+function animateValue(id, start, end, duration) {
+    if (start === end) return; // No change
+    let range = end - start;
+    let current = start;
+    let increment = range / (duration / 20); // update every 20ms
+    let obj = document.getElementById(id);
+    let timer = setInterval(() => {
+        current += increment;
+        if ((increment > 0 && current >= end) || (increment < 0 && current <= end)) {
+            current = end;
+            clearInterval(timer);
+        }
+        obj.textContent = Math.floor(current);
+    }, 20);
+}
+
+async function sendMessage() {
+    const inputBox = document.getElementById('user-input');
+    const message = inputBox.value.trim();
+    if (!message) return;
+
+    const chatBox = document.getElementById('chat-box');
+    const userMsg = document.createElement('div');
+    userMsg.classList.add('message', 'user');
+    userMsg.textContent = "You: " + message;
+    chatBox.appendChild(userMsg);
+    chatBox.scrollTop = chatBox.scrollHeight;
+
+    inputBox.value = '';
+
+    const response = await fetch('/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message })
+    });
+
+    const data = await response.json();
+
+    // AI reply
+    const aiMsg = document.createElement('div');
+    aiMsg.classList.add('message', 'ai');
+    aiMsg.textContent = "{{ ai_name }}: " + data.reply;
+    chatBox.appendChild(aiMsg);
+    chatBox.scrollTop = chatBox.scrollHeight;
+
+    // Play AI voice if available
+    if (data.audio) {
+        playAudioFromBase64(data.audio);
+    }
+
+    // Animate stats
+    if (data.stats) {
+        const stats = data.stats;
+        animateValue('hp', parseInt(document.getElementById('hp').textContent), stats.hp, 500);
+        animateValue('courage', parseInt(document.getElementById('courage').textContent), stats.courage, 500);
+        animateValue('gold', parseInt(document.getElementById('gold').textContent), stats.gold, 500);
+        animateValue('level', parseInt(document.getElementById('level').textContent), stats.level, 500);
+        animateValue('xp', parseInt(document.getElementById('xp').textContent), stats.xp, 500);
+        // Directly update static text fields
+        document.getElementById('skills').textContent = stats.skills;
+        document.getElementById('mood').textContent = stats.mood;
+    }
+}
+
+// Optional: allow Enter key to submit
+document.getElementById("user-input").addEventListener("keypress", function(e) {
+    if (e.key === "Enter") sendMessage();
+});
+</script>
+
+
+</body>
+</html>
