@@ -35,18 +35,40 @@ AI_CHARACTER = {
     "notes": os.getenv("AI_NOTES")
 }
 
-def generate_tts_audio(text):
+def generate_tts_audio(text, stats):
     """
-    Generates TTS audio from AI reply and returns base64 MP3 audio
+    Generates mood-based TTS audio and returns base64 MP3
     """
+    voice = select_voice(stats)
+
     response = client.audio.speech.create(
         model="gpt-4o-mini-tts",
-        voice="onyx",  # male voice
+        voice=voice,
         input=text
     )
 
     audio_bytes = response.read()
     return base64.b64encode(audio_bytes).decode("utf-8")
+
+def select_voice(stats):
+    """
+    Selects voice based on mood and HP
+    """
+    # Low HP overrides everything
+    if stats.hp <= 25:
+        return "echo"  # strained / tired voice
+
+    mood_voice_map = {
+        "Calm": "alloy",
+        "Excited": "onyx",
+        "Angry": "onyx",
+        "Tired": "echo",
+        "Cautious": "echo",
+        "Friendly": "alloy",
+        "Neutral": "onyx"
+    }
+
+    return mood_voice_map.get(stats.mood, "onyx")
 
 # ------------------------
 # System prompt
@@ -156,21 +178,20 @@ def chat():
                 {
                     "role": "system",
                     "content": (
-                        f"You are {AI_CHARACTER['name']}, a fantasy companion in a world of adventure.\n"
-                        f"Stats: HP {stats.hp}, Courage {stats.courage}, Mood {stats.mood}, Level {stats.level}.\n"
-                        f"Rules: Only act if the user explicitly prompts an adventure, fight, or quest.\n"
-                        f"Respond strictly in character dialogue, do not narrate, do not act on your own initiative."
+                        f"You are {AI_CHARACTER['name']}, a fantasy companion.\n"
+                        f"Stats: HP {stats.hp}, Courage {stats.courage}, Mood {stats.mood}, Level {stats.level}.\n\n"
+                        "Rules:\n"
+                        "- Act ONLY if the user’s message implies action\n"
+                        "- Choose your own action logically\n"
+                        "- Respond ONLY in first-person dialogue\n"
+                        "- Do NOT narrate\n"
+                        "- Do NOT mention stats explicitly\n\n"
+                        "Possible actions: fight, explore, flee, negotiate."
                     )
                 },
                 {
                     "role": "user",
-                    "content": (
-                        f"The user says: '{user_message}'.\n"
-                        "You may respond by deciding to fight, flee, explore, or role-play a social interaction. "
-                        "Decide your action entirely based on your own 'thoughts'. "
-                        "Do not perform any action unless the user's message prompts an adventure, fight, or quest. "
-                        "Reply only in character dialogue."
-                    )
+                    "content": user_message
                 }
             ]
 
@@ -210,6 +231,9 @@ def chat():
             elif any(word in lower_scenario for word in neutral_keywords):
                 stats.xp += 5
                 stats.mood = "Friendly"
+            # Low HP mood enforcement
+            elif stats.hp <= 25:
+                stats.mood = "Tired"
             else:
                 stats.mood = "Neutral"
 
@@ -249,7 +273,7 @@ def chat():
         db.session.commit()
 
         # Generate TTS audio for AI reply
-        audio_base64 = generate_tts_audio(ai_reply)
+        audio_base64 = generate_tts_audio(ai_reply, stats)
 
         return jsonify({
             "reply": ai_reply,
